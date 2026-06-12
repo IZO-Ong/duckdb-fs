@@ -4,6 +4,7 @@
 #include "duckdb/catalog/catalog_entry/schema_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/feature_catalog_entry.hpp"
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/string_util.hpp"
 #include "duckdb/main/client_context.hpp"
 
 namespace duckdb {
@@ -114,8 +115,8 @@ static void DuckDBFeaturesFunction(ClientContext &context, TableFunctionInput &d
 		output.data[2].Append(Value(feat.name));
 		// source_table
 		output.data[3].Append(Value(feat.source_table));
-		// entity_column
-		output.data[4].Append(Value(feat.entity_column));
+		// entity_column (comma-separated; empty string for a global feature)
+		output.data[4].Append(Value(StringUtil::Join(feat.entity_columns, ", ")));
 		// timestamp_column
 		output.data[5].Append(Value(feat.timestamp_column));
 		// granularity

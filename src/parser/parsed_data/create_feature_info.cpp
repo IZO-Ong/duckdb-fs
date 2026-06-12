@@ -14,7 +14,7 @@ unique_ptr<CreateInfo> CreateFeatureInfo::Copy() const {
 	CopyProperties(*result);
 	result->feature_name = feature_name;
 	result->source_table = source_table;
-	result->entity_column = entity_column;
+	result->entity_columns = entity_columns;
 	result->timestamp_column = timestamp_column;
 	result->granularity = granularity;
 	result->window_size = window_size;
@@ -39,7 +39,20 @@ string CreateFeatureInfo::ToString() const {
 	}
 	result += feature_name;
 	result += " ON " + source_table;
-	result += " ENTITY " + entity_column;
+	if (!entity_columns.empty()) {
+		if (entity_columns.size() == 1) {
+			result += " ENTITY " + entity_columns[0];
+		} else {
+			result += " ENTITY (";
+			for (idx_t i = 0; i < entity_columns.size(); i++) {
+				if (i > 0) {
+					result += ", ";
+				}
+				result += entity_columns[i];
+			}
+			result += ")";
+		}
+	}
 	result += " TIMESTAMP " + timestamp_column;
 	result += " GRANULARITY ";
 	switch (granularity) {

@@ -1,0 +1,113 @@
+# name: test/sql/feature/test_feature_composite.test
+# description: Test CREATE FEATURE with a composite (multi-column) ENTITY key
+# group: [feature]
+
+require noforcestorage
+
+require skip_reload
+
+# ============================================================
+# Setup: source table keyed by (shop_id, product_id)
+# ============================================================
+statement ok
+CREATE TABLE sales (shop_id INTEGER, product_id INTEGER, qty INTEGER, ts TIMESTAMP);
+
+statement ok
+INSERT INTO sales VALUES
+    (1, 10, 5, '2024-01-01 10:00:00'),
+    (1, 10, 3, '2024-01-02 09:00:00'),
+    (1, 20, 7, '2024-01-01 11:00:00'),
+    (2, 10, 2, '2024-01-02 16:00:00');
+
+# ============================================================
+# Composite entity: ENTITY (shop_id, product_id)
+# ============================================================
+statement ok
+CREATE FEATURE shop_product_sales ON sales ENTITY (shop_id, product_id) TIMESTAMP ts GRANULARITY DAY WINDOW 7 REFRESH FULL RETAIN 1 AS (SELECT shop_id, product_id, SUM(qty) AS total_qty FROM sales GROUP BY shop_id, product_id);
+
+# PIT-correct per (shop, product); buckets are ceilings (start of NEXT day):
+# (1,10) @ 01-02: Jan 1        -> 5
+# (1,10) @ 01-03: Jan 1 + Jan 2 -> 8
+# (1,20) @ 01-02: Jan 1        -> 7
+# (2,10) @ 01-03: Jan 2        -> 2
+query IITI rowsort
+SELECT * FROM shop_product_sales;
+----
+1	10	2024-01-02 00:00:00	5
+1	10	2024-01-03 00:00:00	8
+1	20	2024-01-02 00:00:00	7
+2	10	2024-01-03 00:00:00	2
+
+query I
+SELECT COUNT(*) FROM shop_product_sales;
+----
+4
+
+# ============================================================
+# Metadata: entity_column lists both columns
+# ============================================================
+query I
+SELECT entity_column FROM duckdb_features() WHERE feature_name = 'shop_product_sales';
+----
+shop_id, product_id
+
+query I
+SELECT sql FROM duckdb_features() WHERE feature_name = 'shop_product_sales';
+----
+CREATE FEATURE shop_product_sales ON sales ENTITY (shop_id, product_id) TIMESTAMP ts GRANULARITY DAY WINDOW 7 REFRESH FULL RETAIN 1 AS (SELECT shop_id, product_id, sum(qty) AS total_qty FROM sales GROUP BY shop_id, product_id)
+
+# ============================================================
+# REFRESH the composite feature
+# ============================================================
+statement ok
+REFRESH FEATURE shop_product_sales;
+
+query IITI rowsort
+SELECT * FROM shop_product_sales;
+----
+1	10	2024-01-02 00:00:00	5
+1	10	2024-01-03 00:00:00	8
+1	20	2024-01-02 00:00:00	7
+2	10	2024-01-03 00:00:00	2
+
+# ============================================================
+# SERVE with matching spine column names (no override)
+# ============================================================
+statement ok
+CREATE TABLE shop_spine (shop_id INTEGER, product_id INTEGER, ts TIMESTAMP);
+
+statement ok
+INSERT INTO shop_spine VALUES
+    (1, 10, '2024-01-03 12:00:00'),
+    (1, 20, '2024-01-02 15:00:00');
+
+query IITTI sort
+SERVE FEATURE shop_product_sales FOR shop_spine;
+----
+1	10	2024-01-03 12:00:00	2024-01-03 00:00:00	8
+1	20	2024-01-02 15:00:00	2024-01-02 00:00:00	7
+
+# ============================================================
+# SERVE with a composite ENTITY override (parenthesised list) + ASOF
+# ============================================================
+statement ok
+CREATE TABLE shop_requests (sid INTEGER, pid INTEGER, request_time TIMESTAMP);
+
+statement ok
+INSERT INTO shop_requests VALUES
+    (1, 10, '2024-01-03 12:00:00'),
+    (1, 20, '2024-01-02 15:00:00');
+
+query IITTI sort
+SERVE FEATURE shop_product_sales FOR shop_requests ENTITY (sid, pid) ASOF request_time;
+----
+1	10	2024-01-03 12:00:00	2024-01-03 00:00:00	8
+1	20	2024-01-02 15:00:00	2024-01-02 00:00:00	7
+
+# ============================================================
+# SERVE entity override with wrong arity is rejected
+# ============================================================
+statement error
+SERVE FEATURE shop_product_sales FOR shop_requests ENTITY sid ASOF request_time;
+----
+<REGEX>:.*entity column.*

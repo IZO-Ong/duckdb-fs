@@ -571,6 +571,7 @@ private:
 	// create_feature.gram
 	static unique_ptr<CreateStatement> TransformCreateFeatureStmt(PEGTransformer &transformer,
 	                                                              ParseResult &parse_result);
+	static vector<string> TransformFeatureEntitySpec(PEGTransformer &transformer, ParseResult &parse_result);
 	static FeatureGranularity TransformFeatureGranularity(PEGTransformer &transformer, ParseResult &parse_result);
 	static FeatureRefreshMode TransformFeatureRefreshMode(PEGTransformer &transformer, ParseResult &parse_result);
 	static unique_ptr<SQLStatement> TransformRefreshFeatureStatement(PEGTransformer &transformer,

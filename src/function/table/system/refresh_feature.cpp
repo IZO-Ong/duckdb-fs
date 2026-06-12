@@ -63,7 +63,14 @@ static string BuildPITQuery(const FeatureCatalogEntry &feat, const string &spine
 	for (auto &expr : select_node.select_list) {
 		if (expr->GetExpressionClass() == ExpressionClass::COLUMN_REF) {
 			auto &col_ref = expr->Cast<ColumnRefExpression>();
-			if (col_ref.GetColumnName() == feat.entity_column) {
+			bool is_entity = false;
+			for (auto &entity_col : feat.entity_columns) {
+				if (col_ref.GetColumnName() == entity_col) {
+					is_entity = true;
+					break;
+				}
+			}
+			if (is_entity) {
 				continue;
 			}
 		}
@@ -77,25 +84,42 @@ static string BuildPITQuery(const FeatureCatalogEntry &feat, const string &spine
 	}
 
 	auto gran = GranularityToSQL(feat.granularity);
-	auto entity = QuoteIdent(feat.entity_column);
 	auto ts = QuoteIdent(feat.timestamp_column);
 	auto table = QuoteIdent(feat.source_table);
 	auto window_interval = StringUtil::Format("%d %s", feat.window_size, gran);
 
+	// Build entity-related SQL fragments. Empty entity_columns => global feature (single row per
+	// bucket); multiple entries => composite entity key (one term per column).
+	string select_entities; // "spine.a, spine.b, "
+	string spine_entities;  // "a, b, "
+	string join_entities;   // "tbl.a = spine.a AND tbl.b = spine.b AND "
+	string group_entities;  // "spine.a, spine.b, "
+	for (auto &entity_col : feat.entity_columns) {
+		auto e = QuoteIdent(entity_col);
+		select_entities += "spine." + e + ", ";
+		spine_entities += e + ", ";
+		join_entities += StringUtil::Format("%s.%s = spine.%s AND ", table, e, e);
+		group_entities += "spine." + e + ", ";
+	}
+
+	string select_clause = select_entities + "spine.bucket AS feature_timestamp";
+	if (!agg_exprs.empty()) {
+		select_clause += ", " + agg_exprs;
+	}
+
 	string pit_sql = StringUtil::Format(
-	    "SELECT spine.%s, spine.bucket AS feature_timestamp, %s "
-	    "FROM (SELECT DISTINCT %s, DATE_TRUNC('%s', %s) + INTERVAL '1 %s' AS bucket FROM %s%s) AS spine "
-	    "JOIN %s ON %s.%s = spine.%s "
-	    "AND %s.%s < spine.bucket "
+	    "SELECT %s "
+	    "FROM (SELECT DISTINCT %sDATE_TRUNC('%s', %s) + INTERVAL '1 %s' AS bucket FROM %s%s) AS spine "
+	    "JOIN %s ON %s%s.%s < spine.bucket "
 	    "AND %s.%s >= spine.bucket - INTERVAL '%s' "
-	    "GROUP BY spine.%s, spine.bucket "
-	    "ORDER BY spine.%s, spine.bucket",
-	    entity, agg_exprs,                           // outer SELECT
-	    entity, gran, ts, gran, table, spine_filter, // spine subquery
-	    table, table, entity, entity,                // JOIN
-	    table, ts,                                   // AND <
-	    table, ts, window_interval,                  // AND >=
-	    entity, entity);                             // GROUP BY, ORDER BY
+	    "GROUP BY %sspine.bucket "
+	    "ORDER BY %sspine.bucket",
+	    select_clause,                                       // outer SELECT
+	    spine_entities, gran, ts, gran, table, spine_filter, // spine subquery
+	    table, join_entities, table, ts,                     // JOIN + AND <
+	    table, ts, window_interval,                          // AND >=
+	    group_entities,                                      // GROUP BY
+	    group_entities);                                     // ORDER BY
 
 	return pit_sql;
 }

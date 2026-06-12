@@ -24,8 +24,9 @@ struct CreateFeatureInfo : public CreateInfo {
 	string feature_name;
 	//! Source table name
 	string source_table;
-	//! Entity column (the GROUP BY key)
-	string entity_column;
+	//! Entity columns (the GROUP BY keys). Empty = global feature (no per-entity grouping);
+	//! one entry = simple entity; multiple entries = composite entity key.
+	vector<string> entity_columns;
 	//! Timestamp column (temporal ordering)
 	string timestamp_column;
 	//! Time granularity for bucketing

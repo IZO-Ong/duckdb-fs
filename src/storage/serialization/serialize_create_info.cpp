@@ -100,7 +100,7 @@ void CreateFeatureInfo::Serialize(Serializer &serializer) const {
 	CreateInfo::Serialize(serializer);
 	serializer.WritePropertyWithDefault<string>(200, "feature_name", feature_name);
 	serializer.WritePropertyWithDefault<string>(201, "source_table", source_table);
-	serializer.WritePropertyWithDefault<string>(202, "entity_column", entity_column);
+	serializer.WritePropertyWithDefault<vector<string>>(202, "entity_columns", entity_columns);
 	serializer.WritePropertyWithDefault<string>(203, "timestamp_column", timestamp_column);
 	serializer.WriteProperty<FeatureGranularity>(204, "granularity", granularity);
 	serializer.WritePropertyWithDefault<int64_t>(205, "window_size", window_size);
@@ -116,7 +116,7 @@ unique_ptr<CreateInfo> CreateFeatureInfo::Deserialize(Deserializer &deserializer
 	auto result = duckdb::unique_ptr<CreateFeatureInfo>(new CreateFeatureInfo());
 	deserializer.ReadPropertyWithDefault<string>(200, "feature_name", result->feature_name);
 	deserializer.ReadPropertyWithDefault<string>(201, "source_table", result->source_table);
-	deserializer.ReadPropertyWithDefault<string>(202, "entity_column", result->entity_column);
+	deserializer.ReadPropertyWithDefault<vector<string>>(202, "entity_columns", result->entity_columns);
 	deserializer.ReadPropertyWithDefault<string>(203, "timestamp_column", result->timestamp_column);
 	deserializer.ReadProperty<FeatureGranularity>(204, "granularity", result->granularity);
 	deserializer.ReadPropertyWithDefault<int64_t>(205, "window_size", result->window_size);

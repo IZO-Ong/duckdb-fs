@@ -830,7 +830,10 @@ ForEachClause <- ForEachRow / ForEachStatement
 ForEachRow <- 'FOR' 'EACH' 'ROW'
 ForEachStatement <- 'FOR' 'EACH' 'STATEMENT'
 
-CreateFeatureStmt <- 'FEATURE' IfNotExists? IdentifierOrStringLiteral 'ON' IdentifierOrStringLiteral 'ENTITY' IdentifierOrStringLiteral 'TIMESTAMP' IdentifierOrStringLiteral FeatureGranularityClause? FeatureWindowClause? FeatureRefreshClause? FeatureRetainClause? 'AS' Parens(SelectStatementInternal)
+CreateFeatureStmt <- 'FEATURE' IfNotExists? IdentifierOrStringLiteral 'ON' IdentifierOrStringLiteral FeatureEntityClause? 'TIMESTAMP' IdentifierOrStringLiteral FeatureGranularityClause? FeatureWindowClause? FeatureRefreshClause? FeatureRetainClause? 'AS' Parens(SelectStatementInternal)
+
+FeatureEntityClause <- 'ENTITY' FeatureEntitySpec
+FeatureEntitySpec <- Parens(List(IdentifierOrStringLiteral)) / IdentifierOrStringLiteral
 
 FeatureGranularityClause <- 'GRANULARITY' FeatureGranularity
 FeatureWindowClause <- 'WINDOW' NumberLiteral
@@ -853,7 +856,7 @@ FeatureAtVersionStatement <- 'FEATURE' IdentifierOrStringLiteral 'AT' 'VERSION' 
 ServeFeatureStatement <- 'SERVE' ServeFeatureKw List(IdentifierOrStringLiteral) 'FOR' IdentifierOrStringLiteral ServeFeatureEntity? ServeFeatureAsOf?
 
 ServeFeatureKw <- 'FEATURES' / 'FEATURE'
-ServeFeatureEntity <- 'ENTITY' IdentifierOrStringLiteral
+ServeFeatureEntity <- 'ENTITY' FeatureEntitySpec
 ServeFeatureAsOf <- 'ASOF' IdentifierOrStringLiteral
 
 CreateViewStmt <- CreateRecursive? 'VIEW' IfNotExists? QualifiedName InsertColumnList? WithList? 'AS' SelectStatementInternal

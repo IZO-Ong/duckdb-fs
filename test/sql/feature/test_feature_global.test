@@ -1,0 +1,105 @@
+# name: test/sql/feature/test_feature_global.test
+# description: Test CREATE FEATURE without ENTITY (global feature aggregating the whole table)
+# group: [feature]
+
+require noforcestorage
+
+require skip_reload
+
+# ============================================================
+# Setup: source table with known data for deterministic results
+# ============================================================
+statement ok
+CREATE TABLE events (amount DOUBLE, ts TIMESTAMP);
+
+statement ok
+INSERT INTO events VALUES
+    (100.0, '2024-01-01 10:00:00'),
+    ( 50.0, '2024-01-01 14:00:00'),
+    (200.0, '2024-01-02 09:00:00'),
+    ( 25.0, '2024-01-03 08:00:00');
+
+# ============================================================
+# Global feature: no ENTITY clause -> a single row per time bucket
+# ============================================================
+statement ok
+CREATE FEATURE daily_revenue ON events TIMESTAMP ts GRANULARITY DAY WINDOW 7 REFRESH FULL RETAIN 1 AS (SELECT SUM(amount) AS revenue FROM events);
+
+# Buckets are ceilings (start of NEXT day); value available FROM that timestamp.
+# bucket 01-02: only Jan 1 events  -> 150.0
+# bucket 01-03: Jan 1 + Jan 2       -> 350.0
+# bucket 01-04: Jan 1 + Jan 2 + Jan 3 -> 375.0
+query TR rowsort
+SELECT * FROM daily_revenue;
+----
+2024-01-02 00:00:00	150.0
+2024-01-03 00:00:00	350.0
+2024-01-04 00:00:00	375.0
+
+query I
+SELECT COUNT(*) FROM daily_revenue;
+----
+3
+
+# The materialized table has no entity column, only feature_timestamp + aggregates
+query I
+SELECT COUNT(*) FROM (SELECT * FROM daily_revenue) WHERE feature_timestamp IS NOT NULL;
+----
+3
+
+# ============================================================
+# Metadata: entity_column is empty for a global feature
+# ============================================================
+query I
+SELECT entity_column FROM duckdb_features() WHERE feature_name = 'daily_revenue';
+----
+(empty)
+
+# The reconstructed SQL omits the ENTITY clause
+query I
+SELECT sql FROM duckdb_features() WHERE feature_name = 'daily_revenue';
+----
+CREATE FEATURE daily_revenue ON events TIMESTAMP ts GRANULARITY DAY WINDOW 7 REFRESH FULL RETAIN 1 AS (SELECT sum(amount) AS revenue FROM events)
+
+# ============================================================
+# REFRESH the global feature
+# ============================================================
+statement ok
+REFRESH FEATURE daily_revenue;
+
+query TR rowsort
+SELECT * FROM daily_revenue;
+----
+2024-01-02 00:00:00	150.0
+2024-01-03 00:00:00	350.0
+2024-01-04 00:00:00	375.0
+
+# ============================================================
+# SERVE the global feature: the ASOF join degenerates to the time condition only
+# ============================================================
+statement ok
+CREATE TABLE req (req_id INTEGER, ts TIMESTAMP);
+
+statement ok
+INSERT INTO req VALUES
+    (1, '2024-01-02 12:00:00'),
+    (2, '2024-01-03 10:00:00');
+
+query ITTR sort
+SERVE FEATURE daily_revenue FOR req;
+----
+1	2024-01-02 12:00:00	2024-01-02 00:00:00	150.0
+2	2024-01-03 10:00:00	2024-01-03 00:00:00	350.0
+
+# SERVE with an explicit ASOF override (different spine timestamp column name)
+statement ok
+CREATE TABLE req2 (req_id INTEGER, request_time TIMESTAMP);
+
+statement ok
+INSERT INTO req2 VALUES
+    (1, '2024-01-04 09:00:00');
+
+query ITTR sort
+SERVE FEATURE daily_revenue FOR req2 ASOF request_time;
+----
+1	2024-01-04 09:00:00	2024-01-04 00:00:00	375.0

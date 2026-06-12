@@ -7,7 +7,7 @@ namespace duckdb {
 
 FeatureCatalogEntry::FeatureCatalogEntry(Catalog &catalog, SchemaCatalogEntry &schema, CreateFeatureInfo &info)
     : StandardEntry(CatalogType::FEATURE_ENTRY, schema, catalog, info.feature_name), source_table(info.source_table),
-      entity_column(info.entity_column), timestamp_column(info.timestamp_column), granularity(info.granularity),
+      entity_columns(info.entity_columns), timestamp_column(info.timestamp_column), granularity(info.granularity),
       window_size(info.window_size), refresh_mode(info.refresh_mode), retain_versions(info.retain_versions),
       current_version(info.current_version), last_refresh_timestamp(Timestamp::GetCurrentTimestamp()) {
 	if (info.query) {
@@ -40,7 +40,7 @@ unique_ptr<CreateInfo> FeatureCatalogEntry::GetInfo() const {
 	auto info = make_uniq<CreateFeatureInfo>();
 	info->feature_name = name;
 	info->source_table = source_table;
-	info->entity_column = entity_column;
+	info->entity_columns = entity_columns;
 	info->timestamp_column = timestamp_column;
 	info->granularity = granularity;
 	info->window_size = window_size;
