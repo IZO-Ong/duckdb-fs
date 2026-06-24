@@ -209,8 +209,7 @@ static void RefreshFeatureFunction(ClientContext &context, TableFunctionInput &d
 				                  " AS __feature_version FROM (" + pit_sql + ")";
 				auto ins_result = con.Query(insert_sql);
 				if (ins_result->HasError()) {
-					throw InternalException("Failed to refresh feature '%s': %s", feature_name,
-					                        ins_result->GetError());
+					throw InternalException("Failed to refresh feature '%s': %s", feature_name, ins_result->GetError());
 				}
 				if (ins_result->RowCount() > 0) {
 					state.rows_affected = ins_result->GetValue(0, 0).GetValue<idx_t>();
@@ -223,9 +222,9 @@ static void RefreshFeatureFunction(ClientContext &context, TableFunctionInput &d
 
 				// Copy unaffected rows forward from the current version.
 				auto copy_sql = "INSERT INTO " + table_id + " SELECT * REPLACE (" + duckdb::to_string(new_version) +
-				                " AS __feature_version) FROM " + table_id + " WHERE __feature_version = " +
-				                duckdb::to_string(feat.current_version) + " AND feature_timestamp < '" + watermark +
-				                "'::TIMESTAMP";
+				                " AS __feature_version) FROM " + table_id +
+				                " WHERE __feature_version = " + duckdb::to_string(feat.current_version) +
+				                " AND feature_timestamp < '" + watermark + "'::TIMESTAMP";
 				auto copy_result = con.Query(copy_sql);
 				if (copy_result->HasError()) {
 					throw InternalException("Failed to copy unaffected rows for '%s': %s", feature_name,

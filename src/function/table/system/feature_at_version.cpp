@@ -69,7 +69,8 @@ static unique_ptr<FunctionData> FeatureAtVersionBind(ClientContext &context, Tab
 		throw CatalogException("Feature \"%s\" does not exist", result->feature_name);
 	}
 
-	result->generated_sql = "SELECT * EXCLUDE (__feature_version) FROM " + SQLIdentifier::ToString(result->feature_name) +
+	result->generated_sql = "SELECT * EXCLUDE (__feature_version) FROM " +
+	                        SQLIdentifier::ToString(result->feature_name) +
 	                        " WHERE __feature_version = " + duckdb::to_string(result->version);
 
 	// Capture caller's default catalog/schema

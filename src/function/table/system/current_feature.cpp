@@ -124,7 +124,8 @@ static void CurrentFeatureFunction(ClientContext &context, TableFunctionInput &d
 			throw CatalogException("Feature \"%s\" does not exist", bind_data.feature_name);
 		}
 
-		auto query_sql = "SELECT * EXCLUDE (__feature_version) FROM " + SQLIdentifier::ToString(bind_data.feature_name) +
+		auto query_sql = "SELECT * EXCLUDE (__feature_version) FROM " +
+		                 SQLIdentifier::ToString(bind_data.feature_name) +
 		                 " WHERE __feature_version = " + duckdb::to_string(feature_entry->current_version);
 
 		auto &db = DatabaseInstance::GetDatabase(context);
