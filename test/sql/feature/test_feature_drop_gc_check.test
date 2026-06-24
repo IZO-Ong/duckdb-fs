@@ -1,5 +1,5 @@
 # name: test/sql/feature/test_feature_drop_gc_check.test
-# description: Verify DROP FEATURE removes all version tables and GC drops versions beyond RETAIN
+# description: Verify DROP FEATURE removes the backing table and GC drops versions beyond RETAIN
 # group: [feature]
 
 require noforcestorage
@@ -20,7 +20,7 @@ INSERT INTO events VALUES
     ('y', 30, '2024-01-01 12:00:00');
 
 # ============================================================
-# RETAIN 2: GC should keep only the latest 2 version tables
+# RETAIN 2: GC should keep only the latest 2 versions
 # ============================================================
 statement ok
 CREATE FEATURE f ON events
@@ -32,9 +32,9 @@ CREATE FEATURE f ON events
     RETAIN 2
     AS (SELECT customer, SUM(value) AS total_value);
 
-# After create: only v1 backing table
+# After create: only v1 rows
 query I
-SELECT COUNT(*) FROM duckdb_tables WHERE table_name LIKE 'f\_\_v%' ESCAPE '\';
+SELECT COUNT(DISTINCT __feature_version) FROM f;
 ----
 1
 
@@ -43,7 +43,7 @@ statement ok
 REFRESH FEATURE f;
 
 query I
-SELECT COUNT(*) FROM duckdb_tables WHERE table_name LIKE 'f\_\_v%' ESCAPE '\';
+SELECT COUNT(DISTINCT __feature_version) FROM f;
 ----
 2
 
@@ -52,48 +52,41 @@ statement ok
 REFRESH FEATURE f;
 
 query I
-SELECT COUNT(*) FROM duckdb_tables WHERE table_name LIKE 'f\_\_v%' ESCAPE '\';
+SELECT COUNT(DISTINCT __feature_version) FROM f;
 ----
 2
 
 query I
-SELECT table_name FROM duckdb_tables WHERE table_name LIKE 'f\_\_v%' ESCAPE '\' ORDER BY table_name;
+SELECT DISTINCT __feature_version FROM f ORDER BY __feature_version;
 ----
-f__v2
-f__v3
+2
+3
 
 # refresh -> v4 ; GC drops v2, keep v3 and v4
 statement ok
 REFRESH FEATURE f;
 
 query I
-SELECT table_name FROM duckdb_tables WHERE table_name LIKE 'f\_\_v%' ESCAPE '\' ORDER BY table_name;
+SELECT DISTINCT __feature_version FROM f ORDER BY __feature_version;
 ----
-f__v3
-f__v4
+3
+4
 
 # ============================================================
-# DROP FEATURE: every remaining version table must be gone (no leak)
-# even though current_version=4 but only v3,v4 still exist
+# DROP FEATURE: the remaining backing table must be gone (no leak)
 # ============================================================
 statement ok
 DROP FEATURE f;
 
-# No version tables left at all
+# No backing table left at all
 query I
-SELECT COUNT(*) FROM duckdb_tables WHERE table_name LIKE 'f\_\_v%' ESCAPE '\';
+SELECT COUNT(*) FROM duckdb_tables WHERE table_name = 'f';
 ----
 0
 
 # The feature itself is gone
 query I
 SELECT COUNT(*) FROM duckdb_features() WHERE feature_name = 'f';
-----
-0
-
-# The view is gone too
-query I
-SELECT COUNT(*) FROM duckdb_views WHERE view_name = 'f';
 ----
 0
 

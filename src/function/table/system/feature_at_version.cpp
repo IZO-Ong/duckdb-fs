@@ -69,9 +69,8 @@ static unique_ptr<FunctionData> FeatureAtVersionBind(ClientContext &context, Tab
 		throw CatalogException("Feature \"%s\" does not exist", result->feature_name);
 	}
 
-	// Build the versioned table name
-	auto versioned_table = result->feature_name + "__v" + duckdb::to_string(result->version);
-	result->generated_sql = "SELECT * FROM " + SQLIdentifier::ToString(versioned_table);
+	result->generated_sql = "SELECT * EXCLUDE (__feature_version) FROM " + SQLIdentifier::ToString(result->feature_name) +
+	                        " WHERE __feature_version = " + duckdb::to_string(result->version);
 
 	// Capture caller's default catalog/schema
 	auto &search_path = ClientData::Get(context).catalog_search_path;
@@ -91,8 +90,8 @@ static unique_ptr<FunctionData> FeatureAtVersionBind(ClientContext &context, Tab
 
 	auto prep = con.Prepare(result->generated_sql);
 	if (prep->HasError()) {
-		throw CatalogException("Version %lld of feature \"%s\" does not exist (table \"%s\" not found)",
-		                       result->version, result->feature_name, versioned_table);
+		throw CatalogException("Failed to resolve version %lld of feature \"%s\"", result->version,
+		                       result->feature_name);
 	}
 
 	names = prep->GetNames();

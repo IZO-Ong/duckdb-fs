@@ -5,7 +5,6 @@
 #include "duckdb/catalog/catalog_entry/duck_schema_entry.hpp"
 #include "duckdb/catalog/dependency_manager.hpp"
 #include "duckdb/parser/parsed_data/create_table_info.hpp"
-#include "duckdb/parser/parsed_data/create_view_info.hpp"
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/table/append_state.hpp"
@@ -13,8 +12,6 @@
 #include "duckdb/transaction/duck_transaction.hpp"
 #include "duckdb/planner/bound_constraint.hpp"
 #include "duckdb/common/numeric_utils.hpp"
-#include "duckdb/common/to_string.hpp"
-#include "duckdb/common/sql_identifier.hpp"
 
 namespace duckdb {
 
@@ -39,29 +36,22 @@ unique_ptr<GlobalSinkState> PhysicalCreateFeature::GetGlobalSinkState(ClientCont
 		}
 	}
 
-	// Create the versioned backing table: feature_name__v1
-	auto versioned_table_name = info->feature_name + "__v1";
+	// Create the backing table using Catalog::CreateTable (same transaction, no deadlock)
 	auto table_info = make_uniq<CreateTableInfo>();
 	table_info->catalog = info->catalog;
 	table_info->schema = info->schema;
-	table_info->table = versioned_table_name;
+	table_info->table = info->feature_name;
 	table_info->on_conflict = OnCreateConflict::ERROR_ON_CONFLICT;
 	table_info->temporary = false;
 
 	for (idx_t i = 0; i < info->result_names.size(); i++) {
 		table_info->columns.AddColumn(ColumnDefinition(info->result_names[i], info->result_types[i]));
 	}
+	table_info->columns.AddColumn(ColumnDefinition("__feature_version", LogicalType::BIGINT));
 
 	auto bound_info = make_uniq<BoundCreateTableInfo>(schema, std::move(table_info));
 	auto table_entry = catalog.CreateTable(transaction, schema, *bound_info);
 	result->table = &table_entry->Cast<DuckTableEntry>();
-
-	// Create a view named feature_name that resolves via current_feature()
-	auto view_info = make_uniq<CreateViewInfo>(info->catalog, info->schema, info->feature_name);
-	view_info->on_conflict = OnCreateConflict::ERROR_ON_CONFLICT;
-	auto select_sql = "SELECT * FROM current_feature('" + info->feature_name + "')";
-	view_info->query = CreateViewInfo::ParseSelect(select_sql);
-	auto view_entry = catalog.CreateView(context, *view_info);
 
 	// Create the feature catalog entry
 	auto &duck_schema = schema.Cast<DuckSchemaEntry>();
@@ -73,11 +63,10 @@ unique_ptr<GlobalSinkState> PhysicalCreateFeature::GetGlobalSinkState(ClientCont
 		throw CatalogException::EntryAlreadyExists(CatalogType::FEATURE_ENTRY, info->feature_name);
 	}
 
-	// Make the feature own the view so dropping feature cascades to the view
-	// Version tables are managed explicitly (not via ownership) to allow GC during refresh
+	// Make the feature own the backing table so dropping feature cascades to table
 	auto feature_entry = set.GetEntry(transaction, info->feature_name);
 	auto &duck_catalog = catalog.Cast<DuckCatalog>();
-	duck_catalog.GetDependencyManager()->AddOwnership(transaction, *feature_entry, *view_entry);
+	duck_catalog.GetDependencyManager()->AddOwnership(transaction, *feature_entry, *table_entry);
 
 	return std::move(result);
 }
@@ -94,12 +83,25 @@ SinkResultType PhysicalCreateFeature::Sink(ExecutionContext &context, DataChunk 
 	auto &storage = gstate.table->GetStorage();
 	chunk.Flatten();
 
+	DataChunk versioned_chunk;
+	vector<LogicalType> types;
+	for (idx_t i = 0; i < chunk.ColumnCount(); i++) {
+		types.push_back(chunk.data[i].GetType());
+	}
+	types.push_back(LogicalType::BIGINT);
+	versioned_chunk.Initialize(Allocator::DefaultAllocator(), types);
+	for (idx_t i = 0; i < chunk.ColumnCount(); i++) {
+		versioned_chunk.data[i].Reference(chunk.data[i]);
+	}
+	versioned_chunk.data[chunk.ColumnCount()].Reference(Value::BIGINT(1), count_t(chunk.size()));
+	versioned_chunk.SetCardinality(chunk.size());
+
 	// Lazily create a per-thread optimistic row group collection so that each
 	// pipeline thread appends to its own collection without contention.
 	if (!lstate.collection_index.IsValid()) {
 		lock_guard<mutex> l(gstate.lock);
 		lstate.optimistic_writer = make_uniq<OptimisticDataWriter>(context.client, storage);
-		auto optimistic_collection = lstate.optimistic_writer->CreateCollection(storage, info->result_types);
+		auto optimistic_collection = lstate.optimistic_writer->CreateCollection(storage, types);
 		auto &collection = *optimistic_collection->collection;
 		collection.InitializeEmpty();
 		collection.InitializeAppend(lstate.local_append_state);
@@ -108,7 +110,7 @@ SinkResultType PhysicalCreateFeature::Sink(ExecutionContext &context, DataChunk 
 
 	auto &optimistic_collection = storage.GetOptimisticCollection(context.client, lstate.collection_index);
 	auto &collection = *optimistic_collection.collection;
-	auto new_row_group = collection.Append(chunk, lstate.local_append_state);
+	auto new_row_group = collection.Append(versioned_chunk, lstate.local_append_state);
 	if (new_row_group) {
 		lstate.optimistic_writer->WriteNewRowGroup(optimistic_collection);
 	}

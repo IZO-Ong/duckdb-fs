@@ -64,16 +64,13 @@ static unique_ptr<FunctionData> CurrentFeatureBind(ClientContext &context, Table
 		throw CatalogException("Feature \"%s\" does not exist", result->feature_name);
 	}
 
-	// Use current_version to determine schema (columns never change across versions)
-	auto versioned_table = result->feature_name + "__v" + duckdb::to_string(feature_entry->current_version);
-
 	// Capture caller's default catalog/schema
 	auto &search_path = ClientData::Get(context).catalog_search_path;
 	auto &default_entry = search_path->GetDefault();
 	result->default_catalog = default_entry.catalog;
 	result->default_schema = default_entry.schema;
 
-	// Determine result schema by preparing a query against the current version table
+	// Determine result schema by preparing a query against the current version.
 	auto &db = DatabaseInstance::GetDatabase(context);
 	Connection con(db);
 	if (!result->default_catalog.empty()) {
@@ -83,11 +80,11 @@ static unique_ptr<FunctionData> CurrentFeatureBind(ClientContext &context, Table
 		con.Query("SET schema = '" + result->default_schema + "'");
 	}
 
-	auto schema_sql = "SELECT * FROM " + SQLIdentifier::ToString(versioned_table);
+	auto schema_sql = "SELECT * EXCLUDE (__feature_version) FROM " + SQLIdentifier::ToString(result->feature_name) +
+	                  " WHERE __feature_version = " + duckdb::to_string(feature_entry->current_version);
 	auto prep = con.Prepare(schema_sql);
 	if (prep->HasError()) {
-		throw CatalogException("Failed to resolve schema for feature \"%s\" (table \"%s\" not found)",
-		                       result->feature_name, versioned_table);
+		throw CatalogException("Failed to resolve schema for feature \"%s\"", result->feature_name);
 	}
 
 	names = prep->GetNames();
@@ -127,8 +124,8 @@ static void CurrentFeatureFunction(ClientContext &context, TableFunctionInput &d
 			throw CatalogException("Feature \"%s\" does not exist", bind_data.feature_name);
 		}
 
-		auto versioned_table = bind_data.feature_name + "__v" + duckdb::to_string(feature_entry->current_version);
-		auto query_sql = "SELECT * FROM " + SQLIdentifier::ToString(versioned_table);
+		auto query_sql = "SELECT * EXCLUDE (__feature_version) FROM " + SQLIdentifier::ToString(bind_data.feature_name) +
+		                 " WHERE __feature_version = " + duckdb::to_string(feature_entry->current_version);
 
 		auto &db = DatabaseInstance::GetDatabase(context);
 		Connection con(db);
