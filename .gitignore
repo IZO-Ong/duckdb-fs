@@ -300,6 +300,8 @@ CMakeUserPresets.json
 docs/*
 !docs/images/
 !docs/images/**
+!docs/reports/
+!docs/reports/**
 
 # tests
 test/test.sql

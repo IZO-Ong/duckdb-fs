@@ -13,6 +13,14 @@ This is a fork of DuckDB extended with a native **feature store** — a first-cl
 
 DuckDB is a high-performance analytical database system. It is designed to be fast, reliable, portable, and easy to use. DuckDB provides a rich SQL dialect with support far beyond basic SQL. DuckDB supports arbitrary and nested correlated subqueries, window functions, collations, complex types (arrays, structs, maps), and [several extensions designed to make SQL easier to use](https://duckdb.org/docs/current/sql/dialect/friendly_sql.html).
 
+## Reports
+
+Write-ups of the project, all checked in under [docs/reports/](docs/reports/):
+
+- [Final Report](docs/reports/CP2107_Final_Report_Isaac_Ong.pdf) — motivation, design, and evaluation of the feature store.
+- [Poster](docs/reports/CP2107_Poster_Isaac_Ong.pdf) — one-page summary of the project.
+- [Benchmark Report](docs/reports/Benchmark_Report.pdf) — full benchmark results (optimized vs. unoptimized, across scales) and references.
+
 ## Feature Store
 
 The feature store extension adds first-class SQL statements for **defining**, **materialising**, **serving**, and **inspecting** ML features. Below is the full supported syntax, followed by how it works and a worked example.
@@ -218,8 +226,8 @@ sampling methodology, the `cases/` scenario descriptions, and how to run a famil
 
 #### Viewing results
 
-Benchmark results (optimized vs. unoptimized, across scales) and references are tracked here:
-[Benchmark Results](https://docs.google.com/document/d/1mtmizUy1UohX_ehGZ7x3nsh6R1PTP12Y6em4hqEnsCk/edit?usp=sharing "TODO: replace with the real Google Doc link").
+Benchmark results (optimized vs. unoptimized, across scales) and references are written up in the
+[Benchmark Report](docs/reports/Benchmark_Report.pdf).
 
 <table>
 <tr><td align="center">
