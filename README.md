@@ -19,7 +19,7 @@ Write-ups of the project, all checked in under [docs/reports/](docs/reports/):
 
 - [Final Report](docs/reports/CP2107_Final_Report_Isaac_Ong.pdf) — motivation, design, and evaluation of the feature store.
 - [Poster](docs/reports/CP2107_Poster_Isaac_Ong.pdf) — one-page summary of the project.
-- [Benchmark Report](docs/reports/Benchmark%20Report.pdf) — full benchmark results (optimized vs. unoptimized, across scales) and references.
+- [Benchmark Report](docs/reports/Benchmark_Report.pdf) — full benchmark results (optimized vs. unoptimized, across scales) and references.
 
 ## Feature Store
 
